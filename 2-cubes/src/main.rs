@@ -72,6 +72,10 @@ impl Game {
 
         true
     }
+
+    fn get_game_power(&self) -> usize {
+        self.max_blue * self.max_red * self.max_green
+    }
 }
 
 impl Games {
@@ -108,6 +112,13 @@ impl Games {
             None => 0,
             }
     }
+
+    fn get_total_power(&self) -> usize {
+        self.games.iter()
+            .map(|game| game.get_game_power())
+            .reduce(|a, b| a + b)
+            .unwrap_or(0)
+    }
 }
 
 fn main() {
@@ -118,6 +129,9 @@ fn main() {
     let games = Games::from_file(filename);
     let result = games.check_colours(&vec![("red", 12), ("green", 13), ("blue", 14)]);
     println!("Result is: {}", result);
+
+    let power = games.get_total_power();
+    println!("Total game power is: {}", power);
 }
 
 #[cfg(test)]
@@ -145,6 +159,18 @@ mod tests {
     }
 
     #[test]
+    fn test_games_total_power() {
+        let game1 = Game::new(1, 6, 4, 2);
+        let game2 = Game::new(2, 4, 1, 3);
+
+        let games = Games {
+            games: vec![game1, game2],
+        };
+
+        assert_eq!(games.get_total_power(), 60);
+    }
+
+    #[test]
     fn test_game_from_line() {
         let line1 = "Game 1: 3 blue, 4 red; 1 red, 2 green, 6 blue; 2 green";
         let game1 = Game::new(1, 6, 4, 2);
@@ -157,5 +183,14 @@ mod tests {
         let line3 = "Game 3: 1 blue, 2 red; 3 green";
         let game3 = Game::new(3, 1, 2, 3);
         assert_eq!(Game::from_line(line3), game3);
+    }
+
+    #[test]
+    fn test_game_power() {
+        let game1 = Game::new(1, 6, 4, 2);
+        assert_eq!(game1.get_game_power(), 48);
+
+        let game2 = Game::new(2, 4, 1, 3);
+        assert_eq!(game2.get_game_power(), 12);
     }
 }
