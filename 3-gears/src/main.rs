@@ -130,6 +130,22 @@ impl Schematic {
             }
         }).sum()
     }
+
+    fn get_gear_ratios(&self) -> usize {
+        let mut gear_ratios: usize = 0;
+
+        for component in self.components.type_index.get(&ComponentType::Symbol('*')).into_iter().flatten() {
+            let adjacent_parts = self.components.get_adjacent_parts(component.x, component.y);
+
+            if adjacent_parts.len() == 2 {
+                let gear_ratio_a: usize = adjacent_parts[0].component.to_string().parse().expect("Failed to parse gear ratio");
+                let gear_ratio_b: usize = adjacent_parts[1].component.to_string().parse().expect("Failed to parse gear ratio");
+                gear_ratios += gear_ratio_a * gear_ratio_b;
+            }
+            
+        }
+        gear_ratios
+    }
     
 }
 
@@ -147,7 +163,7 @@ impl IndexedComponentList {
         self._rebuild_indexes();
     }
 
-    fn get_adjacent_parts(&self, x: X, y: Y) -> HashSet<SchematicComponent> {
+    fn get_adjacent_parts(&self, x: X, y: Y) -> Vec<SchematicComponent> {
         let mut adjacent_parts = HashSet::new();
 
         let mut positions = vec![
@@ -173,7 +189,7 @@ impl IndexedComponentList {
             }
         }
 
-        adjacent_parts
+        Vec::from_iter(adjacent_parts)
     }
 
     fn _rebuild_indexes(&mut self) {
@@ -214,6 +230,8 @@ fn main() {
     let schematic = Schematic::from_file(reader);
     
     println!("Result is: {:?}", schematic.get_part_numbers_sum());
+
+    println!("Gear Ratios are: {:?}", schematic.get_gear_ratios());
 }
 
 #[cfg(test)]
@@ -432,5 +450,14 @@ mod tests {
     #[should_panic]
     fn test_get_part_numbers_sum_unknown_symbol() {
         Schematic::from_file(Cursor::new(String::from("?").into_bytes()));
+    }
+
+    #[test]
+    fn test_get_gear_ratios() {
+        let schematic = Schematic::from_file(test_string());
+
+        let gear_ratios = schematic.get_gear_ratios();
+        println!("Gear ratios: {:?}", gear_ratios);
+        assert_eq!(gear_ratios, 467835);
     }
 }
