@@ -6,8 +6,8 @@ use std::{
 
 #[derive(Debug)]
 struct Race {
-    total_time: u32,
-    record_distance: u32,
+    total_time: u64,
+    record_distance: u64,
 }
 
 impl TryFrom<(&str, &str)> for Race {
@@ -22,7 +22,7 @@ impl TryFrom<(&str, &str)> for Race {
 }
 
 impl Race  {
-    fn get_min_winning_press(&self) -> u32 {
+    fn get_min_winning_press(&self) -> u64 {
         //=CEILING((total_time-SQRT(POW(total_time, 2)-4*record_distance))/2)
         let total_time = self.total_time as f64;
         let record_distance = self.record_distance as f64;
@@ -30,12 +30,12 @@ impl Race  {
         let winning_press = (total_time - (total_time.powi(2) - 4.0 * record_distance).sqrt()) / 2.0;
 
         match winning_press.fract() == 0.0 {
-            true => winning_press as u32 + 1,
-            false => winning_press.ceil() as u32,
+            true => winning_press as u64 + 1,
+            false => winning_press.ceil() as u64,
         }
     }
 
-    fn get_max_winning_press(&self) -> u32 {
+    fn get_max_winning_press(&self) -> u64 {
         //=FLOOR((total_time+SQRT(POW(total_time, 2)-4*record_distance))/2)
         let total_time = self.total_time as f64;
         let record_distance = self.record_distance as f64;
@@ -43,12 +43,12 @@ impl Race  {
         let winning_press = (total_time + (total_time.powi(2) - 4.0 * record_distance).sqrt()) / 2.0;
 
         match winning_press.fract() == 0.0 {
-            true => winning_press as u32 - 1,
-            false => winning_press.floor() as u32,
+            true => winning_press as u64 - 1,
+            false => winning_press.floor() as u64,
         }
     }
 
-    fn get_num_winning_presses(&self) -> u32 {
+    fn get_num_winning_presses(&self) -> u64 {
         self.get_max_winning_press() - self.get_min_winning_press() + 1
     }
 }
@@ -83,7 +83,7 @@ fn main() {
 
     let races = define_races(reader).expect("Can't parse races");
 
-    let num_winning_presses: Vec<u32> = races.iter().map(|r| r.get_num_winning_presses()).collect();
+    let num_winning_presses: Vec<u64> = races.iter().map(|r| r.get_num_winning_presses()).collect();
 
     let ways_to_beat_record = num_winning_presses.iter().fold(1, Mul::mul);
 
