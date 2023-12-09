@@ -10,16 +10,16 @@ enum Rank {
     Ace = 14,
     King = 13,
     Queen = 12,
-    Jack = 11,
-    Ten = 10,
-    Nine = 9,
-    Eight = 8,
-    Seven = 7,
-    Six = 6,
-    Five = 5,
-    Four = 4,
-    Three = 3,
-    Two = 2,
+    Ten = 11,
+    Nine = 10,
+    Eight = 9,
+    Seven = 8,
+    Six = 7,
+    Five = 6,
+    Four = 5,
+    Three = 4,
+    Two = 3,
+    Jack = 2,
 }
 
 impl From<usize> for Rank {
@@ -28,16 +28,16 @@ impl From<usize> for Rank {
             14 => Rank::Ace,
             13 => Rank::King,
             12 => Rank::Queen,
-            11 => Rank::Jack,
-            10 => Rank::Ten,
-            9 => Rank::Nine,
-            8 => Rank::Eight,
-            7 => Rank::Seven,
-            6 => Rank::Six,
-            5 => Rank::Five,
-            4 => Rank::Four,
-            3 => Rank::Three,
-            2 => Rank::Two,
+            11 => Rank::Ten,
+            10 => Rank::Nine,
+            9 => Rank::Eight,
+            8 => Rank::Seven,
+            7 => Rank::Six,
+            6 => Rank::Five,
+            5 => Rank::Four,
+            4 => Rank::Three,
+            3 => Rank::Two,
+            2 => Rank::Jack,
             _ => panic!("Invalid rank"),
         }
     }
@@ -86,7 +86,6 @@ impl std::fmt::Debug for Card {
             Rank::Ace => "A",
             Rank::King => "K",
             Rank::Queen => "Q",
-            Rank::Jack => "J",
             Rank::Ten => "T",
             Rank::Nine => "9",
             Rank::Eight => "8",
@@ -96,6 +95,7 @@ impl std::fmt::Debug for Card {
             Rank::Four => "4",
             Rank::Three => "3",
             Rank::Two => "2",
+            Rank::Jack => "J",
         };
 
         write!(f, "{}", rank_str)
@@ -145,7 +145,6 @@ impl TryFrom<String> for Hand {
                 'A' => cards[i].rank = Rank::Ace,
                 'K' => cards[i].rank = Rank::King,
                 'Q' => cards[i].rank = Rank::Queen,
-                'J' => cards[i].rank = Rank::Jack,
                 'T' => cards[i].rank = Rank::Ten,
                 '9' => cards[i].rank = Rank::Nine,
                 '8' => cards[i].rank = Rank::Eight,
@@ -155,6 +154,7 @@ impl TryFrom<String> for Hand {
                 '4' => cards[i].rank = Rank::Four,
                 '3' => cards[i].rank = Rank::Three,
                 '2' => cards[i].rank = Rank::Two,
+                'J' => cards[i].rank = Rank::Jack,
                 _ => return Err("Invalid card"),
             }
             i += 1;
@@ -219,7 +219,7 @@ impl Hand {
             }
         }
 
-        match num_quints {
+        let hand_type = match num_quints {
             1 => HandType::FiveOfAKind(quint_rank.expect("No quint rank")),
             0 => match num_quads {
                 1 => HandType::FourOfAKind(quad_rank.expect("No quad rank")),
@@ -249,9 +249,79 @@ impl Hand {
                 _ => panic!("Invalid hand"),
             },
             _ => panic!("Invalid hand"),
+        };
+
+        let joker_count = self.cards.iter().filter(|c| c.rank == Rank::Jack).count();
+
+        //Get highest card that is not a Jack
+        let mut highest_card = Rank::Two;
+        for card in self.cards.iter() {
+            if card.rank != Rank::Jack && card.rank > highest_card {
+                highest_card = Rank::from(card.rank);
+                break;
+            }
+        }
+
+        if joker_count == 0 {
+            return hand_type;
+        } else {
+            return match hand_type {
+                HandType::FiveOfAKind(rank) => HandType::FiveOfAKind(rank),
+                HandType::FourOfAKind(rank) => {
+                    if rank == Rank::Jack {
+                        HandType::FiveOfAKind(highest_card)
+                    } else {
+                        HandType::FiveOfAKind(rank)
+                    }
+                },
+                HandType::FullHouse(big_rank, small_rank) => {
+                    if big_rank == Rank::Jack {
+                        HandType::FiveOfAKind(small_rank)
+                    } else if small_rank == Rank::Jack {
+                        HandType::FiveOfAKind(big_rank)
+                    } else {
+                        if joker_count >= 2 {
+                            HandType::FiveOfAKind(big_rank)
+                        } else {
+                            HandType::FourOfAKind(big_rank)
+                        }
+                    }
+                },
+                HandType::ThreeOfAKind(rank) => {
+                    if rank == Rank::Jack {
+                        HandType::FourOfAKind(rank)
+                    } else {
+                        HandType::FourOfAKind(rank)
+                    }
+                },
+                HandType::TwoPair(big_rank, small_rank) => {
+                    if big_rank == Rank::Jack {
+                        HandType::FourOfAKind(small_rank)
+                    } else if small_rank == Rank::Jack {
+                        HandType::FourOfAKind(big_rank)
+                    } else {
+                        HandType::FullHouse(big_rank, small_rank)
+                    }
+                },
+                HandType::OnePair(rank) => {
+                    if rank == Rank::Jack {
+                        HandType::ThreeOfAKind(highest_card)
+                    } else {
+                        HandType::ThreeOfAKind(rank)
+                    }
+                },
+                HandType::HighCard(rank) => {
+                    if rank == Rank::Jack {
+                        HandType::OnePair(highest_card)
+                    } else {
+                        HandType::OnePair(rank)
+                    }
+                },
+            }
         }
     }
 }
+
 
 #[derive(Debug)]
 enum ParseError {
@@ -386,16 +456,6 @@ AKQJT 0
             },
             Hand {
                 cards: [
-                    Card { rank: Rank::Ace },
-                    Card { rank: Rank::King },
-                    Card { rank: Rank::Queen },
-                    Card { rank: Rank::Jack },
-                    Card { rank: Rank::Ten },
-                ],
-                bid: 0,
-            },
-            Hand {
-                cards: [
                     Card { rank: Rank::Three },
                     Card { rank: Rank::Two },
                     Card { rank: Rank::Ten },
@@ -403,6 +463,16 @@ AKQJT 0
                     Card { rank: Rank::King },
                 ],
                 bid: 765,
+            },
+            Hand {
+                cards: [
+                    Card { rank: Rank::Ace },
+                    Card { rank: Rank::King },
+                    Card { rank: Rank::Queen },
+                    Card { rank: Rank::Jack },
+                    Card { rank: Rank::Ten },
+                ],
+                bid: 0,
             },
         ];
 
@@ -420,7 +490,7 @@ AKQJT 0
         }
 
         match Hand::try_from(String::from("T55J5 684")) {
-            Ok(hand) => assert_eq!(hand.hand_type(), HandType::ThreeOfAKind(Rank::Five)),
+            Ok(hand) => assert_eq!(hand.hand_type(), HandType::FourOfAKind(Rank::Five)),
             Err(e) => panic!("Error: {:?}", e),
         }
 
@@ -430,12 +500,12 @@ AKQJT 0
         }
 
         match Hand::try_from(String::from("KTJJT 220")) {
-            Ok(hand) => assert_eq!(hand.hand_type(), HandType::TwoPair(Rank::Jack, Rank::Ten)),
+            Ok(hand) => assert_eq!(hand.hand_type(), HandType::FourOfAKind(Rank::Ten)),
             Err(e) => panic!("Error: {:?}", e),
         }
 
         match Hand::try_from(String::from("QQQJA 483")) {
-            Ok(hand) => assert_eq!(hand.hand_type(), HandType::ThreeOfAKind(Rank::Queen)),
+            Ok(hand) => assert_eq!(hand.hand_type(), HandType::FourOfAKind(Rank::Queen)),
             Err(e) => panic!("Error: {:?}", e),
         }
     }
@@ -455,14 +525,14 @@ QQQJA 483"
         assert_eq!(hands[0].hand_type(), HandType::OnePair(Rank::Three));
         assert_eq!(
             hands[1].hand_type(),
-            HandType::TwoPair(Rank::Jack, Rank::Ten)
+            HandType::TwoPair(Rank::King, Rank::Seven)
         );
         assert_eq!(
             hands[2].hand_type(),
-            HandType::TwoPair(Rank::King, Rank::Seven)
+            HandType::FourOfAKind(Rank::Five)
         );
-        assert_eq!(hands[3].hand_type(), HandType::ThreeOfAKind(Rank::Five));
-        assert_eq!(hands[4].hand_type(), HandType::ThreeOfAKind(Rank::Queen));
+        assert_eq!(hands[3].hand_type(), HandType::FourOfAKind(Rank::Queen));
+        assert_eq!(hands[4].hand_type(), HandType::FourOfAKind(Rank::Ten));
     }
 
     #[test]
