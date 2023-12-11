@@ -14,6 +14,8 @@ type Route = (Location, Location);
 struct Map {
     directions: Vec<Direction>,
     nodes: HashMap<Location, Route>,
+    start_nodes: Vec<Location>,
+    end_nodes: Vec<Location>,
 }
 
 #[derive(Debug)]
@@ -46,6 +48,8 @@ impl Map{
         Map {
             directions: Vec::new(),
             nodes: HashMap::new(),
+            start_nodes: Vec::new(),
+            end_nodes: Vec::new(),
         }
     }
 
@@ -76,32 +80,75 @@ impl Map{
             let left: [char; 3] = chars[7..10].try_into()?;
             let right: [char; 3] = chars[12..15].try_into()?;
 
+            if name[2] == 'A' {
+                self.start_nodes.push(name);
+            } else if name[2] == 'Z' {
+                self.end_nodes.push(name);
+            }
+
             nodes.insert(name, (left, right));
         }
+
+        self.start_nodes.sort();
+        self.end_nodes.sort();
 
         Ok(())
     }
 
-    fn follow_route(&self, next: Location, route_position: usize) -> u32 {
-        let (left, right) = self.nodes.get(&next).expect("Node not found");
+    fn follow_route(&self, next: Location, route_position: usize, end_z_only: bool) -> u64 {
+        let mut step = 1;
+        let mut next = next;
+        let mut route_position = route_position;
 
-        let route_position = match route_position>=self.directions.len() {
-            true => 0,
-            false => route_position,
-        };
+        loop {
+            let (left, right) = self.nodes.get(&next).expect("Node not found");
 
-        let next = match self.directions.get(route_position as usize) {
-            Some(Direction::L) => left,
-            Some(Direction::R) => right,
-            None => panic!("Invalid route"),
-        };
+            route_position = match route_position>=self.directions.len() {
+                true => 0,
+                false => route_position,
+            };
 
-        if next == &['Z', 'Z', 'Z'] {
-            return 1;
-        } else {
-            return 1 + self.follow_route(*next, route_position + 1)
+            next = match self.directions.get(route_position as usize) {
+                Some(Direction::L) => *left,
+                Some(Direction::R) => *right,
+                None => panic!("Invalid route"),
+            };
+
+            if !end_z_only && next == ['Z', 'Z', 'Z'] {
+                break;
+            } else if end_z_only && next[2] == 'Z' {
+                break;
+            } else {
+                route_position += 1;
+                step += 1;
+            }
         }
+        step
     }
+
+    fn follow_route_ghost(&self) -> u64 {
+        let ghost_result = self.start_nodes
+            .iter()
+            .map(|start| self.follow_route(*start, 0, true))
+            .collect::<Vec<u64>>();
+        ghost_result
+            .into_iter()
+            .reduce(|a, b| lcm(a, b))
+            .expect("Can't calculate ghost result")
+        
+    }
+}
+
+fn gcd(a: u64, b: u64) -> u64 {
+    if b == 0 {
+        a
+    } else {
+        gcd(b, a % b)
+    }
+}
+
+fn lcm(a: u64, b: u64) -> u64 {
+    a / gcd(a, b) * b
 }
 
 fn main() {
@@ -115,9 +162,13 @@ fn main() {
     let mut map = Map::new();
     map.parse_map(reader).expect("Can't parse map");
 
-    let result = map.follow_route(['A', 'A', 'A'], 0);
+    let result = map.follow_route(['A', 'A', 'A'], 0, false);
 
     println!("Steps taken to navigate route: {}", result);
+
+    let ghost_result = map.follow_route_ghost();
+
+    println!("Steps as a ghost to navigate route: {}", ghost_result);
 }
 
 #[cfg(test)]
@@ -163,7 +214,7 @@ ZZZ = (ZZZ, ZZZ)".to_string()
         let mut map = Map::new();
         map.parse_map(reader).expect("Can't parse map");
 
-        assert_eq!(map.follow_route(['A', 'A', 'A'], 0), 2);
+        assert_eq!(map.follow_route(['A', 'A', 'A'], 0, false), 2);
     }
 
     #[test]
@@ -177,6 +228,25 @@ ZZZ = (ZZZ, ZZZ)";
         let mut map = Map::new();
         map.parse_map(reader).expect("Can't parse map");
 
-        assert_eq!(map.follow_route(['A', 'A', 'A'], 0), 6);
+        assert_eq!(map.follow_route(['A', 'A', 'A'], 0, false), 6);
+    }
+
+    #[test]
+    fn test_follow_route_ghosts() {
+        let input = "LR
+
+11A = (11B, XXX)
+11B = (XXX, 11Z)
+11Z = (11B, XXX)
+22A = (22B, XXX)
+22B = (22C, 22C)
+22C = (22Z, 22Z)
+22Z = (22B, 22B)
+XXX = (XXX, XXX)";
+        let reader = BufReader::new(input.as_bytes());
+        let mut map = Map::new();
+        map.parse_map(reader).expect("Can't parse map");
+
+        assert_eq!(map.follow_route_ghost(), 6);
     }
 }
