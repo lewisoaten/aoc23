@@ -1,6 +1,6 @@
 use std::{io::{BufRead, BufReader}, env, fs::File};
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 struct History {
     data_points: Vec<i64>,
 }
@@ -43,6 +43,32 @@ impl History {
             return match derived_history.extrapolate() {
                 Some(derived_datapoint) => {
                     return Some(last_datum + derived_datapoint)
+                },
+                None => {
+                    None
+                }
+            }
+        }
+    }
+
+    fn extrapolate_backwards(&self) -> Option<i64> {
+        // Find difference between each data point
+        let derived_history = History::new(
+            self.data_points
+                .clone()
+                .iter()
+                .zip(self.data_points.iter().skip(1))
+                .map(|(&a, &b)| b - a).collect()
+        );
+
+        let first_datum = self.data_points.first().copied()?;
+
+        if derived_history.all_zero() {
+            return Some(first_datum);
+        } else {
+            return match derived_history.extrapolate_backwards() {
+                Some(derived_datapoint) => {
+                    return Some(first_datum - derived_datapoint)
                 },
                 None => {
                     None
@@ -100,6 +126,14 @@ fn sum_extrapolations(histories: Vec<History>) -> i64 {
         .expect("Cant accumulate histories")
 }
 
+fn sum_backwards_extrapolations(histories: Vec<History>) -> i64 {
+    histories
+        .iter()
+        .map(|history| history.extrapolate_backwards().expect("No history should be empty"))
+        .reduce(|a, i| a+i)
+        .expect("Cant accumulate backwards histories")
+}
+
 fn main() {
     // Get file name from command line
     let args: Vec<String> = env::args().collect();
@@ -110,9 +144,13 @@ fn main() {
 
     let histories = parse_histories(reader).expect("Parsed histories");
 
-    let sums = sum_extrapolations(histories);
+    let sums = sum_extrapolations(histories.clone());
 
     println!("Sum of extrapolations: {}", sums);
+
+    let backwards_sums = sum_backwards_extrapolations(histories);
+
+    println!("Sum of backwards extrapolations: {}", backwards_sums);
 }
 
 
@@ -158,5 +196,14 @@ mod tests {
         let histories = parse_histories(reader).unwrap();
 
         assert_eq!(sum_extrapolations(histories), 114)
+    }
+
+    #[test]
+    fn test_sum_backwards_extrapolations() {
+        let test_data = test_data();
+        let reader = BufReader::new(test_data.as_bytes());
+        let histories = parse_histories(reader).unwrap();
+
+        assert_eq!(sum_backwards_extrapolations(histories), 2)
     }
 }
