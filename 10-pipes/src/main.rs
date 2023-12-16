@@ -39,7 +39,7 @@ struct Pointer {
     b_coord: Coordinate,
     tile_visited: HashSet<Coordinate>,
     number_map: HashMap<Coordinate, String>,
-    star_map: HashMap<Coordinate, String>,
+    star_map: Vec<Coordinate>,
 }
 
 #[derive(Debug)]
@@ -157,60 +157,78 @@ impl Pointer {
             b_coord: coord,
             tile_visited: HashSet::new(),
             number_map: HashMap::new(),
-            star_map: HashMap::new(),
+            star_map: Vec::new(),
         }
-    }
-
-    fn print_number_map(&self) -> String {
-        let mut output = "".to_string();
-        for y in 0 as u32..999 {
-            if self.number_map.get(&(0 as u32,y)).is_none() {
-                break;
-            }
-            for x in 0 as u32..999 {
-                output += match self.number_map.get(&(x,y)) {
-                    Some(tile) => tile,
-                    None => break,
-                }
-            }
-            output += "\n";
-        }
-
-        output
     }
 
     fn print_star_map(&self) -> String {
         let mut output = "".to_string();
-        for y in 0 as u32..999 {
-            if self.star_map.get(&(0 as u32,y)).is_none() {
-                break;
-            }
-            for x in 0 as u32..999 {
-                output += match self.star_map.get(&(x,y)) {
-                    Some(tile) => tile,
-                    None => break,
+
+        let max_x = self.star_map.iter().map(|(x, _)| x).max().unwrap()+1;
+        let max_y = self.star_map.iter().map(|(_, y)| y).max().unwrap()+1;
+
+        for y in 0 as u32..max_y {
+            for x in 0 as u32..max_x {
+                output += match self.star_map.contains(&(x,y)) {
+                    true => "*",
+                    false => " ",
                 }
             }
             output += "\n";
         }
 
         output
+    }
+
+    fn print_number_map(&self) -> String {
+        let mut output = "".to_string();
+
+        let max_x = self.number_map.keys().max_by_key(|(x, _)| x).unwrap().0+1;
+        let max_y = self.number_map.keys().max_by_key(|(_, y)| y).unwrap().1+1;
+
+        for y in 0 as u32..max_y {
+            for x in 0 as u32..max_x {
+                output += match self.number_map.get(&(x,y)) {
+                    Some(tile) => tile,
+                    None => " ",
+                }
+            }
+            output += "\n";
+        }
+
+        output
+    }
+
+    fn walk_tunnel(&mut self, map: &Map) {
+        self.star_map.clear();
+
+        let mut previous_coord = map.start;
+        let mut current_coord = map.start;
+
+        self.star_map.push(previous_coord);
+
+        loop {
+            current_coord = match Pointer::proceed(previous_coord, current_coord, map, None) {
+                Some(coord) => {
+                    if self.star_map.contains(&coord) {
+                        break;
+                    } else {
+                        self.star_map.push(coord);
+                        previous_coord = current_coord;
+                        coord
+                    }
+                },
+                None => {
+                    break;
+                },
+            };
+        }
     }
 
     fn longest_unvisited_path(&mut self, map: &Map) -> u32 {
         self.tile_visited.clear();
         self.tile_visited.insert(self.a_coord);
         self.tile_visited.insert(self.b_coord);
-
-        for tile in map.tiles.keys() {
-            match map.tiles.get(tile) {
-                Some(tile) => {
-                    self.number_map.insert(tile.coord, <&Tile as Into<String>>::into(tile));
-                    self.star_map.insert(tile.coord, <&Tile as Into<String>>::into(tile));
-                },
-                None => (),
-            };
-        }
         
         let mut step = 0;
 
@@ -220,16 +238,23 @@ impl Pointer {
         let mut a_previous_coord = self.a_coord;
         let mut b_previous_coord = self.b_coord;
 
+        self.number_map.insert(self.a_coord, format!("{}", step));
+
         //Need to get starting two options by checking adjacent tiles for matching routes out.
         // then need to follow each route until the next part is already visited and exit with that number (do so for both routes)
         loop {
             if !a_dead_end {
-                self.a_coord = match self.proceed(a_previous_coord, self.a_coord, map) {
+                self.a_coord = match Pointer::proceed(a_previous_coord, self.a_coord, map, None) {
                     Some(coord) => {
-                        self.number_map.insert(coord, format!("{}", step+1));
-                        self.star_map.insert(coord, "*".to_string() );
-                        a_previous_coord = self.a_coord;
-                        coord
+                        if self.tile_visited.contains(&coord) {
+                            a_dead_end = true;
+                            (0,0)
+                        } else {
+                            self.tile_visited.insert(coord);
+                            self.number_map.insert(coord, format!("{}", step+1));
+                            a_previous_coord = self.a_coord;
+                            coord
+                        }
                     },
                     None => {
                         a_dead_end = true;
@@ -239,11 +264,17 @@ impl Pointer {
             }
 
             if !b_dead_end {
-                self.b_coord = match self.proceed(b_previous_coord, self.b_coord, map) {
+                self.b_coord = match Pointer::proceed(b_previous_coord, self.b_coord, map, Some(self.a_coord)) {
                     Some(coord) => {
-                        self.number_map.insert(coord, format!("{}", step+1));
-                        b_previous_coord = self.b_coord;
-                        coord
+                        if self.tile_visited.contains(&coord) {
+                            b_dead_end = true;
+                            (0,0)
+                        } else {
+                            self.tile_visited.insert(coord);
+                            self.number_map.insert(coord, format!("{}", step+1));
+                            b_previous_coord = self.b_coord;
+                            coord
+                        }
                     },
                     None => {
                         b_dead_end = true;
@@ -262,7 +293,7 @@ impl Pointer {
         step
     }
 
-    fn proceed(&mut self, previous_coord: Coordinate, starting_coord: Coordinate, map: &Map) -> Option<Coordinate> {
+    fn proceed(previous_coord: Coordinate, starting_coord: Coordinate, map: &Map, ignore_coord: Option<Coordinate>) -> Option<Coordinate> {
         let mut next_coord: Option<Coordinate> = None;
 
         if let Some(tile) = map.get_tile(starting_coord) {
@@ -311,21 +342,19 @@ impl Pointer {
                 },
                 TileType::Ground => { None },
                 TileType::Start => { 
-                    self.find_starting_route(starting_coord, map)
+                    Pointer::find_starting_route(starting_coord, map, ignore_coord)
                  },
             };
         }
 
-        if self.tile_visited.contains(&next_coord?) || map.get_tile(next_coord?).is_none() {
+        if map.get_tile(next_coord?).is_none() {
             return None;
         }
-
-        self.tile_visited.insert(next_coord?);
 
         next_coord
     }
 
-    fn find_starting_route(&self, starting_coord: Coordinate, map: &Map) -> Option<Coordinate> {
+    fn find_starting_route(starting_coord: Coordinate, map: &Map, ignore_coord: Option<Coordinate>) -> Option<Coordinate> {
         let mut next_step: Option<Coordinate> = None;
         
         for coord in (-1 as i32..2).flat_map(move |a| (-1 as i32..2).map(move |b| (a, b))) {
@@ -337,8 +366,11 @@ impl Pointer {
             }
             
             let test_coord = ((starting_coord.0 as i32 + coord.0) as u32, (starting_coord.1 as i32 + coord.1) as u32);
-            if self.tile_visited.contains(&test_coord) {
-                continue;
+
+            if let Some(ignore_coord) = ignore_coord {
+                if test_coord == ignore_coord {
+                    continue;
+                }
             }
 
             if let Some(tile) = map.get_tile(test_coord) {
@@ -384,6 +416,52 @@ impl Pointer {
         }
         next_step
     }
+
+    fn winding_number(&self, point: Coordinate) -> i32 {
+        let mut winding_number = 0;
+        let n = self.star_map.len();
+        for i in 0..n {
+            let v1 = self.star_map[i];
+            let v2 = self.star_map[(i + 1) % n];
+            if v1.1 <= point.1 {
+                if v2.1 > point.1 && self.is_left(&v1, &v2, &point) > 0 {
+                    winding_number += 1;
+                }
+            } else {
+                if v2.1 <= point.1 && self.is_left(&v1, &v2, &point) < 0 {
+                    winding_number -= 1;
+                }
+            }
+        }
+        winding_number
+    }
+
+    fn is_left(&self, v1: &Coordinate, v2: &Coordinate, point: &Coordinate) -> i32 {
+        (v2.0 as i32 - v1.0 as i32) * (point.1 as i32 - v1.1 as i32) - (point.0 as i32 - v1.0 as i32) * (v2.1 as i32 - v1.1 as i32)
+    }
+
+    fn is_inside(&self, point: Coordinate) -> bool {
+        self.winding_number(point) != 0
+    }
+
+    fn tiles_inside_loop(&self, map: &Map) -> u32 {
+        let mut tiles_inside = 0;
+
+        let non_loop_tiles = map
+            .tiles
+            .iter()
+            .filter(|(coord, _)| !self.star_map.contains(coord))
+            .map(|(coord, _)| coord)
+            .collect::<Vec<&Coordinate>>();
+
+        for tile in non_loop_tiles {
+            if self.is_inside(*tile) {
+                tiles_inside += 1;
+            }
+        }
+
+        tiles_inside
+    }
 }
 
 fn main() {
@@ -398,9 +476,13 @@ fn main() {
     let mut pointer = Pointer::new(map.start);
     let longest_path = pointer.longest_unvisited_path(&map);
 
+    pointer.walk_tunnel(&map);
+
     println!("{}", pointer.print_star_map());
 
     println!("Longest path: {}", longest_path);
+
+    println!("Tiles inside loop: {}", pointer.tiles_inside_loop(&map));
 }
 
 #[cfg(test)]
@@ -454,8 +536,129 @@ mod tests {
         let mut pointer = Pointer::new(map.start);
         let longest_path = pointer.longest_unvisited_path(&map);
 
+        pointer.walk_tunnel(&map);
+
+        println!("{}", pointer.print_star_map());
         println!("{}", pointer.print_number_map());
 
         assert_eq!(longest_path, 4);
+    }
+
+    #[test]
+    fn test_winding_number() {
+        let input = test_data();
+        let reader = std::io::Cursor::new(input);
+        let map = Map::parse_map(reader).unwrap();
+
+        let mut pointer = Pointer::new(map.start);
+        pointer.longest_unvisited_path(&map);
+
+        pointer.walk_tunnel(&map);
+
+        println!("{}", pointer.print_star_map());
+
+
+
+        assert_eq!(pointer.is_inside((0, 0)), false);
+        assert_eq!(pointer.is_inside((2, 2)), true);
+    }
+
+
+    #[test]
+    fn test_tiles_inside_loop() {
+        let input = "
+...........
+.S-------7.
+.|F-----7|.
+.||.....||.
+.||.....||.
+.|L-7.F-J|.
+.|..|.|..|.
+.L--J.L--J.
+...........";
+        let reader = std::io::Cursor::new(input);
+        let map = Map::parse_map(reader).unwrap();
+
+        let mut pointer = Pointer::new(map.start);
+
+        pointer.walk_tunnel(&map);
+
+        println!("{}", pointer.print_star_map());
+
+        assert_eq!(pointer.tiles_inside_loop(&map), 4);
+    }
+
+    #[test]
+    fn test_tiles_inside_loop_no_gap() {
+        let input = "
+..........
+.S------7.
+.|F----7|.
+.||....||.
+.||....||.
+.|L-7F-J|.
+.|..||..|.
+.L--JL--J.
+..........";
+        let reader = std::io::Cursor::new(input);
+        let map = Map::parse_map(reader).unwrap();
+
+        let mut pointer = Pointer::new(map.start);
+
+        pointer.walk_tunnel(&map);
+
+        println!("{}", pointer.print_star_map());
+
+        assert_eq!(pointer.tiles_inside_loop(&map), 4);
+    }
+
+    #[test]
+    fn test_tiles_inside_loop_larger_example() {
+        let input = "
+.F----7F7F7F7F-7....
+.|F--7||||||||FJ....
+.||.FJ||||||||L7....
+FJL7L7LJLJ||LJ.L-7..
+L--J.L7...LJS7F-7L7.
+....F-J..F7FJ|L7L7L7
+....L7.F7||L7|.L7L7|
+.....|FJLJ|FJ|F7|.LJ
+....FJL-7.||.||||...
+....L---J.LJ.LJLJ...";
+        let reader = std::io::Cursor::new(input);
+        let map = Map::parse_map(reader).unwrap();
+
+        let mut pointer = Pointer::new(map.start);
+
+        pointer.walk_tunnel(&map);
+
+        println!("{}", pointer.print_star_map());
+
+        assert_eq!(pointer.tiles_inside_loop(&map), 8);
+    }
+
+    #[test]
+    fn test_tiles_inside_loop_junk() {
+        let input = "
+FF7FSF7F7F7F7F7F---7
+L|LJ||||||||||||F--J
+FL-7LJLJ||||||LJL-77
+F--JF--7||LJLJ7F7FJ-
+L---JF-JLJ.||-FJLJJ7
+|F|F-JF---7F7-L7L|7|
+|FFJF7L7F-JF7|JL---7
+7-L-JL7||F7|L7F-7F7|
+L.L7LFJ|||||FJL7||LJ
+L7JLJL-JLJLJL--JLJ.L";
+        let reader = std::io::Cursor::new(input);
+        let map = Map::parse_map(reader).unwrap();
+
+        let mut pointer = Pointer::new(map.start);
+
+        pointer.walk_tunnel(&map);
+
+        println!("{}", pointer.print_star_map());
+
+        assert_eq!(pointer.tiles_inside_loop(&map), 10);
     }
 }
