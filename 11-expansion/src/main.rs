@@ -1,7 +1,8 @@
 use std::{io::{BufRead, BufReader}, env, fs::File};
 
-type Coordinate = (u32, u32);
+type Coordinate = (u64, u64);
 
+#[derive(Debug, Clone)]
 struct Observation {
     galaxies: Vec<Coordinate>,
 }
@@ -49,7 +50,7 @@ impl Observation {
 
             for (x, c) in line.chars().enumerate() {
                 if c == '#' {
-                    observation.add_galaxy((x as u32, y as u32));
+                    observation.add_galaxy((x as u64, y as u64));
                 }
             }
         }
@@ -57,7 +58,7 @@ impl Observation {
         Ok(observation)
     }
 
-    fn perform_expansion(&mut self) {
+    fn perform_expansion(&mut self, amount: u64) {
         //Find columns without any galaxies
         let mut empty_columns = Vec::new();
         let max_x = self.galaxies.iter().map(|(x, _)| x).max().unwrap()+1;
@@ -85,11 +86,11 @@ impl Observation {
 
         for y in 0..max_y {
             if empty_rows.contains(&y) {
-                new_y += 1;
+                new_y += amount;
             }
             for x in 0..max_x {
                 if empty_columns.contains(&x) {
-                    new_x += 1;
+                    new_x += amount;
                 }
 
                 if self.galaxies.contains(&(x,y)) {
@@ -112,8 +113,8 @@ impl Observation {
         let max_x = self.galaxies.iter().map(|(x, _)| x).max().unwrap()+1;
         let max_y = self.galaxies.iter().map(|(_, y)| y).max().unwrap()+1;
 
-        for y in 0 as u32..max_y {
-            for x in 0 as u32..max_x {
+        for y in 0 as u64..max_y {
+            for x in 0 as u64..max_x {
                 output += match self.galaxies.contains(&(x,y)) {
                     true => "#",
                     false => ".",
@@ -125,17 +126,17 @@ impl Observation {
         output
     }
 
-    fn calculate_distance(&self, galaxy1: Coordinate, galaxy2: Coordinate) -> u32 {
-        let x1 = galaxy1.0 as i32;
-        let y1 = galaxy1.1 as i32;
-        let x2 = galaxy2.0 as i32;
-        let y2 = galaxy2.1 as i32;
+    fn calculate_distance(&self, galaxy1: Coordinate, galaxy2: Coordinate) -> u64 {
+        let x1 = galaxy1.0 as i64;
+        let y1 = galaxy1.1 as i64;
+        let x2 = galaxy2.0 as i64;
+        let y2 = galaxy2.1 as i64;
 
-        ((x1-x2).abs() + (y1-y2).abs()) as u32
+        ((x1-x2).abs() + (y1-y2).abs()) as u64
     }
 
-    fn distance_combinations(&self) -> u32 {
-        let mut combinations = 0;
+    fn distance_combinations(&self) -> u64 {
+        let mut combinations = 0 as u64;
 
         for (i, galaxy1) in self.galaxies.iter().enumerate() {
             for galaxy2 in self.galaxies.iter().skip(i+1) {
@@ -156,9 +157,15 @@ fn main() {
 
     let mut observation = Observation::parse_map(reader).expect("Parsed map");
 
-    observation.perform_expansion();
+    let mut observation_two = observation.clone();
 
-    println!("Distance combinations:{}", observation.distance_combinations());
+    observation.perform_expansion(1);
+
+    println!("Distance combinations (part1):{}", observation.distance_combinations());
+
+    observation_two.perform_expansion(1000000-1);
+
+    println!("Distance combinations (part1):{}", observation_two.distance_combinations());
 }
 
 #[cfg(test)]
@@ -193,7 +200,7 @@ mod tests {
         let reader = std::io::Cursor::new(input);
         let mut observation = Observation::parse_map(reader).unwrap();
 
-        observation.perform_expansion();
+        observation.perform_expansion(1);
 
         assert_eq!(observation.print_observation(),
 "....#........
@@ -217,7 +224,7 @@ mod tests {
         let reader = std::io::Cursor::new(input);
         let mut observation = Observation::parse_map(reader).unwrap();
 
-        observation.perform_expansion();
+        observation.perform_expansion(1);
 
         assert_eq!(observation.calculate_distance(observation.galaxies[0], observation.galaxies[6]), 15);
         assert_eq!(observation.calculate_distance(observation.galaxies[2], observation.galaxies[5]), 17);
@@ -230,8 +237,30 @@ mod tests {
         let reader = std::io::Cursor::new(input);
         let mut observation = Observation::parse_map(reader).unwrap();
 
-        observation.perform_expansion();
+        observation.perform_expansion(1);
 
         assert_eq!(observation.distance_combinations(), 374);
+    }
+
+    #[test]
+    fn test_distance_combinations_10x() {
+        let input = test_data();
+        let reader = std::io::Cursor::new(input);
+        let mut observation = Observation::parse_map(reader).unwrap();
+
+        observation.perform_expansion(9);
+
+        assert_eq!(observation.distance_combinations(), 1030);
+    }
+
+    #[test]
+    fn test_distance_combinations_100x() {
+        let input = test_data();
+        let reader = std::io::Cursor::new(input);
+        let mut observation = Observation::parse_map(reader).unwrap();
+
+        observation.perform_expansion(99);
+
+        assert_eq!(observation.distance_combinations(), 8410);
     }
 }
