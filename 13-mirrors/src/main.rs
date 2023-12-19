@@ -1,4 +1,4 @@
-use std::{io::{BufRead, BufReader}, env, fs::File, collections::{HashMap, HashSet}};
+use std::{io::{BufRead, BufReader}, env, fs::File, collections::HashSet};
 
 struct Pattern {
     rows: Vec<String>,
@@ -89,10 +89,14 @@ impl Pattern {
         Ok(maintenance_records)
     }
 
-    fn vertical_point_of_incidence(&self) -> Option<usize> {
-        let mut remaining_reflection_points: HashSet<usize> = (1..self.rows[0].len()).collect();
+    fn vertical_point_of_incidence(rows: Vec<String>, exclude_point: Option<usize>) -> Option<usize> {
+        let mut remaining_reflection_points: HashSet<usize> = (1..rows[0].len()).collect();
 
-        for row in self.rows.iter() {
+        if let Some(exclude_point) = exclude_point {
+            remaining_reflection_points.remove(&exclude_point);
+        }
+
+        for row in rows.iter() {
             for point in remaining_reflection_points.clone() {
                 let reflection_size = usize::min(point, row.len() - point);
                 let reflection_start = (point as i64 - reflection_size as i64).max(0) as usize;
@@ -112,10 +116,14 @@ impl Pattern {
         }
     }
 
-    fn horizontal_point_of_incidence(&self) -> Option<usize> {
-        let mut remaining_reflection_points: HashSet<usize> = (1..self.columns[0].len()).collect();
+    fn horizontal_point_of_incidence(cols: Vec<String>, exclude_point: Option<usize>) -> Option<usize> {
+        let mut remaining_reflection_points: HashSet<usize> = (1..cols[0].len()).collect();
 
-        for col in self.columns.iter() {
+        if let Some(exclude_point) = exclude_point {
+            remaining_reflection_points.remove(&exclude_point);
+        }
+
+        for col in cols.iter() {
             for point in remaining_reflection_points.clone() {
                 let reflection_size = usize::min(point, col.len() - point);
                 let reflection_start = (point as i64 - reflection_size as i64).max(0) as usize;
@@ -135,21 +143,81 @@ impl Pattern {
         }
     }
 
+    fn vertical_point_of_incidence_smudge(rows: Vec<String>) -> Option<usize> {
+        let original_vertical_point_of_incidence= Pattern::vertical_point_of_incidence(rows.clone(), None);
+
+        for (row_num, row) in rows.iter().enumerate() {
+            for (col_num, col) in row.chars().enumerate() {
+                let mut new_rows = rows.clone();
+                let new_symbol = if col == '#' { '.' } else { '#' };
+                new_rows[row_num].replace_range(col_num..col_num+1, new_symbol.to_string().as_str());
+                match Pattern::vertical_point_of_incidence(new_rows.clone(), original_vertical_point_of_incidence) {
+                    Some(point) => {
+                        if Some(point) != original_vertical_point_of_incidence || original_vertical_point_of_incidence.is_none() {
+                            return Some(point);
+                        }
+                    },
+                    None => (),
+                
+                }
+            }
+        }
+        None
+    }
+
+    fn horizontal_point_of_incidence_smudge(cols: Vec<String>) -> Option<usize> {
+        let original_vertical_point_of_incidence = Pattern::horizontal_point_of_incidence(cols.clone(), None);
+
+        for (col_num, col) in cols.iter().enumerate() {
+            for (row_num, row) in col.chars().enumerate() {
+                let mut new_cols = cols.clone();
+                let new_symbol = if row == '#' { '.' } else { '#' };
+                new_cols[col_num].replace_range(row_num..row_num+1, new_symbol.to_string().as_str());
+                match Pattern::horizontal_point_of_incidence(new_cols, original_vertical_point_of_incidence) {
+                    Some(point) => {
+                        if Some(point) != original_vertical_point_of_incidence || original_vertical_point_of_incidence.is_none() {
+                            return Some(point);
+                        }
+                    },
+                    None => (),
+                
+                }
+            }
+        }
+        None
+    }
+
     fn sum_of_reflection_points(&self) -> usize {
         let mut sum = 0;
-        if let Some(point) = self.vertical_point_of_incidence() {
+        if let Some(point) = Pattern::vertical_point_of_incidence(self.rows.clone(), None) {
             sum += point;
         }
-        if let Some(point) = self.horizontal_point_of_incidence() {
+        if let Some(point) = Pattern::horizontal_point_of_incidence(self.columns.clone(), None) {
             sum += 100 * point;
         }
+
+        assert!(sum > 0);
+        sum
+    }
+
+    fn sum_of_reflection_points_smudge(&self) -> usize {
+        let mut sum = 0;
+        if let Some(point) = Pattern::vertical_point_of_incidence_smudge(self.rows.clone()) {
+            sum += point;
+        }
+        if let Some(point) = Pattern::horizontal_point_of_incidence_smudge(self.columns.clone()) {
+            sum += 100 * point;
+        }
+        assert!(sum > 0);
         sum
     }
 }
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    let filename = args.get(1).expect("Please provide a filename");
+    // let args: Vec<String> = env::args().collect();
+    // let filename = args.get(1).expect("Please provide a filename");
+
+    let filename = "input/input2.txt";
 
     let file = File::open(filename).expect("Failed to open file");
     let reader = BufReader::new(file);
@@ -159,6 +227,10 @@ fn main() {
     let sum_of_reflection_points: usize = patterns.iter().map(|p| p.sum_of_reflection_points()).sum();
     
     println!("Sum of reflection points: {}", sum_of_reflection_points);
+
+    let sum_of_reflection_points_smudge: usize = patterns.iter().map(|p| p.sum_of_reflection_points_smudge()).sum();
+
+    println!("Sum of reflection points smudge: {}", sum_of_reflection_points_smudge);
 }
 
 
@@ -204,13 +276,60 @@ mod tests {
         let reader = std::io::Cursor::new(input);
         let records = Pattern::parse_all_patterns(reader).unwrap();
 
-        assert_eq!(records[0].vertical_point_of_incidence(), Some(5));
-        assert_eq!(records[1].vertical_point_of_incidence(), None);
+        assert_eq!(Pattern::vertical_point_of_incidence(records[0].rows.clone(), None), Some(5));
+        assert_eq!(Pattern::vertical_point_of_incidence(records[1].rows.clone(), None), None);
 
-        assert_eq!(records[0].horizontal_point_of_incidence(), None);
-        assert_eq!(records[1].horizontal_point_of_incidence(), Some(4));
+        assert_eq!(Pattern::horizontal_point_of_incidence(records[0].columns.clone(), None), None);
+        assert_eq!(Pattern::horizontal_point_of_incidence(records[1].columns.clone(), None), Some(4));
 
         assert_eq!(records[0].sum_of_reflection_points(), 5);
-        assert_eq!(records[1].sum_of_reflection_points(), 4);
+        assert_eq!(records[1].sum_of_reflection_points(), 400);
+    }
+
+    #[test]
+    fn test_vertical_point_of_incidence_smudge() {
+        let input = test_data();
+        let reader = std::io::Cursor::new(input);
+        let records = Pattern::parse_all_patterns(reader).unwrap();
+
+        assert_eq!(Pattern::vertical_point_of_incidence_smudge(records[0].rows.clone()), None);
+        assert_eq!(Pattern::vertical_point_of_incidence_smudge(records[1].rows.clone()), None);
+
+        assert_eq!(Pattern::horizontal_point_of_incidence_smudge(records[0].columns.clone()), Some(3));
+        assert_eq!(Pattern::horizontal_point_of_incidence_smudge(records[1].columns.clone()), Some(1));
+
+        assert_eq!(records[0].sum_of_reflection_points_smudge(), 300);
+        assert_eq!(records[1].sum_of_reflection_points_smudge(), 100);
+    }
+
+    #[test]
+    fn test_vertical_point_of_incidence_smudge_failing1() {
+        let input =
+"......#
+###.#..
+###.##.
+###.##.
+###.#..
+.....##
+##..#..
+##.#...
+.###.#.
+##.....
+..#...#
+#....##
+#....##
+..#...#
+##.....";
+        let reader = std::io::Cursor::new(input);
+        let records = Pattern::parse_all_patterns(reader).unwrap();
+
+        assert_eq!(Pattern::vertical_point_of_incidence(records[0].rows.clone(), None), None);
+        assert_eq!(Pattern::horizontal_point_of_incidence(records[0].columns.clone(), None), Some(12));
+
+        assert_eq!(Pattern::vertical_point_of_incidence_smudge(records[0].rows.clone()), None);
+        assert_eq!(Pattern::horizontal_point_of_incidence_smudge(records[0].columns.clone()), Some(3));
+
+        assert_eq!(records[0].sum_of_reflection_points(), 1200);
+        assert_eq!(records[0].sum_of_reflection_points_smudge(), 300);
     }
 }
